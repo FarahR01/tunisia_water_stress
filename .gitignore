@@ -28,7 +28,10 @@ wheels/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+.ipynb_checkpoints/
+# Exclude notebooks except source notebooks in /notebooks
 *.ipynb
+!notebooks/*.ipynb
 
 # IDE
 .vscode/
