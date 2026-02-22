@@ -1,0 +1,6 @@
+model,prediction_2030,scenario_method
+DecisionTree,83.8678945825,average
+Lasso,80.92786554019239,average
+LinearRegression,81.27475443885652,average
+RandomForest,84.87967577379997,average
+Ridge,81.22914019014112,average
