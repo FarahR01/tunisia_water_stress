@@ -1,0 +1,168 @@
+# Training Configuration for Tunisia Water Stress Regression Models
+# =================================================================
+#
+# This file defines all parameters for a reproducible ML experiment.
+# Any changes here are tracked in experiment runs via MLflow.
+#
+# Usage:
+#   python src/train.py --config config/train_config.yaml
+#
+# Or programmatically:
+#   from src.config_train import TrainConfig
+#   config = TrainConfig.from_yaml("config/train_config.yaml")
+
+# ============================================================================
+# REPRODUCIBILITY SETTINGS
+# ============================================================================
+# Random seeds guarantee that the same configuration produces identical results
+# across different runs and environments.
+seeds:
+  numpy_seed: 42                # NumPy operations (preprocessing, array operations)
+  python_seed: 42               # Python random module
+  sklearn_seed: 42              # Scikit-learn models (DecisionTree, RandomForest, Ridge, Lasso)
+  xgboost_seed: 42              # XGBoost gradient boosting
+
+# ============================================================================
+# DATA CONFIGURATION
+# ============================================================================
+# Defines data source paths and preprocessing parameters
+data:
+  raw_data_path: "data/raw/environment_tun.csv"
+  processed_data_path: "data/processed/processed_tunisia.csv"
+
+  # Drop columns with more than 50% missing values
+  sparse_threshold: 0.5
+
+  # Keywords to match when auto-selecting features (if explicit_features not set)
+  feature_keywords:
+    - renewable
+    - water productivity
+    - population
+    - urban
+    - rural
+    - agricultural land
+    - arable
+    - precipitation
+    - forest
+    - greenhouse
+
+  # If set, use ONLY these features (overrides keyword matching)
+  # Example: ["renewable_energy", "population_density", "precipitation"]
+  explicit_features: null
+
+  # Target column (auto-detected from "Level of water stress" if null)
+  target_column: null
+
+# ============================================================================
+# FEATURE ENGINEERING
+# ============================================================================
+# Advanced feature engineering options for improved model performance
+feature_engineering:
+  # Add lag features (0 to disable)
+  lag_features: 0
+
+  # Drop features highly correlated with target (prevents leakage)
+  apply_leakage_filter: true
+  leakage_correlation_threshold: 0.99
+
+  # Drop features with high pairwise correlation (reduces multicollinearity)
+  apply_collinearity_filter: true
+  collinearity_threshold: 0.95
+
+  # Maximum number of features to keep (0 for unlimited)
+  max_features: 12
+
+# ============================================================================
+# TRAIN/TEST SPLIT
+# ============================================================================
+# Temporal split strategy: train on years <= train_end_year, test on later years
+split:
+  train_end_year: 2010
+
+# ============================================================================
+# MODELS CONFIGURATION
+# ============================================================================
+# Select which models to train and their hyperparameters
+# Each model can be individually enabled/disabled
+models:
+  # Enable/disable hyperparameter tuning for all models via GridSearchCV
+  enable_hyperparameter_tuning: false
+
+  # Linear Regression (baseline)
+  linear_regression:
+    enabled: true
+    hyperparameters: {}
+
+  # Decision Tree (interpretable, can capture non-linearity)
+  decision_tree:
+    enabled: true
+    hyperparameters:
+      random_state: 42
+
+  # Random Forest (ensemble, robust)
+  random_forest:
+    enabled: true
+    hyperparameters:
+      n_estimators: 100
+      random_state: 42
+
+  # Ridge Regression (handles multicollinearity)
+  ridge:
+    enabled: true
+    hyperparameters: {}
+
+  # Lasso Regression (feature selection via L1 regularization)
+  lasso:
+    enabled: true
+    hyperparameters:
+      max_iter: 10000
+
+  # XGBoost (gradient boosting, usually high performance but slower)
+  xgboost:
+    enabled: false
+    hyperparameters:
+      random_state: 42
+      verbosity: 0
+
+# ============================================================================
+# EXPERIMENT TRACKING (MLflow)
+# ============================================================================
+# Track experiment metrics, parameters, and models for reproducibility and comparison
+mlflow:
+  # Enable/disable MLflow logging
+  enabled: true
+
+  # Where to store MLflow artifacts (local directory or remote server)
+  # Examples:
+  #   "./mlruns"                           # Local file storage
+  #   "http://localhost:5000"              # Local MLflow server
+  #   "s3://my-bucket/mlruns"              # AWS S3
+  #   "gs://my-bucket/mlruns"              # Google Cloud Storage
+  tracking_uri: "./mlruns"
+
+  # Experiment name (groups related runs together)
+  experiment_name: "water_stress_regression"
+
+  # Save trained models to MLflow registry (for production deployment)
+  log_models: true
+
+  # Save plots as artifacts (feature importance, predictions)
+  log_plots: true
+
+# ============================================================================
+# OUTPUT
+# ============================================================================
+# Where to save trained models and results
+output_dir: "models_tuned"
+
+# ============================================================================
+# EXPERIMENT DOCUMENTATION
+# ============================================================================
+# Add notes about this experiment for future reference
+experiment_notes: |
+  Baseline experiment with tuned hyperparameters for Tunisia water stress prediction.
+  - Data: Years 1972-2020 (raw: environment_tun.csv)
+  - Target: Level of water stress
+  - Features: Auto-selected from keywords (renewable, water productivity, population, etc.)
+  - Split: Train on ≤2010, test on >2010 (temporal)
+  - Filters: Leakage (r>0.99) and collinearity (r>0.95) applied

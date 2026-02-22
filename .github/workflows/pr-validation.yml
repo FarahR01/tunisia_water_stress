@@ -1,0 +1,53 @@
+name: PR Validation - Test Training Pipeline
+
+on:
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  test-training:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r api_requirements.txt
+
+      # THE IMPORTANT PART: Test that training works
+      - name: Test training pipeline
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, 'src')
+          from data_loader import load_and_pivot
+          from preprocessing import preprocess_data
+          from feature_engineering import engineer_features
+          
+          print('Testing data loading...')
+          df = load_and_pivot('data/raw/', 'data/processed/')
+          print(f'✓ Loaded {len(df)} rows')
+          
+          print('Testing preprocessing...')
+          df = preprocess_data(df)
+          print(f'✓ Preprocessed to {len(df)} rows')
+          
+          print('Testing feature engineering...')
+          df = engineer_features(df)
+          print(f'✓ Features engineered: {len(df.columns)} columns')
+          
+          print('✅ Training pipeline works!')
+          "
+
+      - name: Test model training on sample
+        run: |
+          python src/train.py --sample
+        continue-on-error: false

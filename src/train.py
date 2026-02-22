@@ -1,12 +1,13 @@
 import argparse
 import os
+import random
 from pprint import pprint
 
 import joblib
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import LinearRegression, Ridge, Lasso
+from sklearn.linear_model import Lasso, LinearRegression, Ridge
 from sklearn.preprocessing import StandardScaler
 from sklearn.tree import DecisionTreeRegressor
 
@@ -14,12 +15,14 @@ try:
     from xgboost import XGBRegressor
 
     XGBOOST_AVAILABLE = True
-except Exception as e:
+except Exception:
     XGBOOST_AVAILABLE = False
     XGBRegressor = None
 
 try:
-    from .data_loader import load_and_pivot, list_available_indicators
+    from .config_train import TrainConfig
+    from .data_loader import list_available_indicators, load_and_pivot
+    from .data_versioning import DataManifest
     from .evaluate import (
         plot_actual_vs_pred,
         plot_feature_importance,
@@ -27,16 +30,19 @@ try:
         save_metrics,
     )
     from .feature_engineering import add_lag_features, add_year_column
-    from .preprocessing import drop_sparse_columns, fill_missing, select_features
     from .feature_importance import (
         extract_feature_importance,
         plot_top_features,
         save_feature_importance_summary,
     )
-    from .hyperparameter_tuning import tune_hyperparameters, save_hyperparameter_results
+    from .hyperparameter_tuning import save_hyperparameter_results, tune_hyperparameters
+    from .mlflow_utils import MLflowTracker
+    from .preprocessing import drop_sparse_columns, fill_missing
 except Exception:
     # Support running `python src/train.py` (script) where `src/` is on sys.path
-    from data_loader import load_and_pivot, list_available_indicators
+    from config_train import TrainConfig
+    from data_loader import list_available_indicators, load_and_pivot
+    from data_versioning import DataManifest
     from evaluate import (
         plot_actual_vs_pred,
         plot_feature_importance,
@@ -44,16 +50,57 @@ except Exception:
         save_metrics,
     )
     from feature_engineering import add_lag_features, add_year_column
-    from preprocessing import drop_sparse_columns, fill_missing, select_features
     from feature_importance import (
         extract_feature_importance,
         plot_top_features,
         save_feature_importance_summary,
     )
-    from hyperparameter_tuning import tune_hyperparameters, save_hyperparameter_results
+    from hyperparameter_tuning import save_hyperparameter_results, tune_hyperparameters
+    from mlflow_utils import MLflowTracker
+    from preprocessing import drop_sparse_columns, fill_missing
 
 
 print(">>> USING UPDATED TRAIN FILE (leakage fix applied) <<<")
+
+
+# ============================================================================
+# REPRODUCIBILITY: SET RANDOM SEEDS
+# ============================================================================
+def set_random_seeds(config: "TrainConfig") -> None:
+    """Set all random seeds for reproducibility.
+
+    Args:
+        config: TrainConfig with seed settings
+    """
+    np.random.seed(config.seeds.numpy_seed)
+    random.seed(config.seeds.python_seed)
+    print(f"✓ Random seeds set: numpy={config.seeds.numpy_seed}, python={config.seeds.python_seed}")
+
+
+# ============================================================================
+# DATA VERSIONING: TRACK DATA FILES
+# ============================================================================
+def track_data_versions(config: "TrainConfig") -> None:
+    """Track data file versions for reproducibility.
+
+    Args:
+        config: TrainConfig with data paths
+    """
+    try:
+        manifest = DataManifest()
+        if os.path.exists(config.data.raw_data_path):
+            manifest.add_file(config.data.raw_data_path, source="World Bank")
+        if os.path.exists(config.data.processed_data_path):
+            manifest.add_file(config.data.processed_data_path, source="Pipeline")
+
+        manifest_path = os.path.join(
+            os.path.dirname(config.data.raw_data_path), "DATA_MANIFEST.json"
+        )
+        manifest.save(manifest_path)
+        print(f"✓ Data manifest saved to {manifest_path}")
+    except Exception as e:
+        print(f"Warning: Could not create data manifest: {e}")
+
 
 DEFAULT_FEATURE_KEYWORDS = [
     "renewable",
@@ -120,11 +167,31 @@ def train_and_evaluate(
     X_test,
     y_test,
     out_dir: str,
+    config: "TrainConfig" = None,
+    mlflow_logger=None,
     tune_hyperparams=False,
     use_ridge=False,
     use_lasso=False,
     use_xgboost=False,
 ):
+    """Train and evaluate models with optional MLflow tracking.
+
+    Args:
+        X_train, y_train: Training features and target
+        X_test, y_test: Test features and target
+        out_dir: Directory to save model artifacts
+        config: TrainConfig for reproducibility logging
+        mlflow_logger: MLflow logger for experiment tracking
+        tune_hyperparams: Enable hyperparameter tuning
+        use_ridge, use_lasso, use_xgboost: Model selection flags
+    """
+    # Use config settings if provided, otherwise fall back to flags
+    if config:
+        tune_hyperparams = config.models.enable_hyperparameter_tuning
+        use_ridge = config.models.ridge.enabled
+        use_lasso = config.models.lasso.enabled
+        use_xgboost = config.models.xgboost.enabled
+
     # Scale features for linear models to improve numeric stability (Ridge/Lasso)
     scaler = StandardScaler()
     X_train_scaled = X_train.copy()
@@ -143,8 +210,12 @@ def train_and_evaluate(
 
     models = {
         "LinearRegression": LinearRegression(),
-        "DecisionTree": DecisionTreeRegressor(random_state=0),
-        "RandomForest": RandomForestRegressor(n_estimators=100, random_state=0),
+        "DecisionTree": DecisionTreeRegressor(
+            random_state=42 if not config else config.seeds.sklearn_seed
+        ),
+        "RandomForest": RandomForestRegressor(
+            n_estimators=100, random_state=42 if not config else config.seeds.sklearn_seed
+        ),
     }
 
     # Add Ridge/Lasso if requested
@@ -156,7 +227,8 @@ def train_and_evaluate(
     if use_xgboost:
         if XGBOOST_AVAILABLE and XGBRegressor is not None:
             try:
-                models["XGBoost"] = XGBRegressor(random_state=0, verbosity=0)
+                seed = 42 if not config else config.seeds.xgboost_seed
+                models["XGBoost"] = XGBRegressor(random_state=seed, verbosity=0)
                 print("✓ XGBoost successfully added to models")
             except Exception as e:
                 print(f"Warning: Failed to instantiate XGBoost: {e}")
@@ -191,16 +263,26 @@ def train_and_evaluate(
         results[name] = metrics
         joblib.dump(model, os.path.join(out_dir, f"{name}.joblib"))
 
+        # Log to MLflow if logger provided
+        if mlflow_logger:
+            for metric_name, metric_value in metrics.items():
+                mlflow_logger.log_metric(f"{name}/{metric_name}", metric_value)
+
         # plots for predictions
-        plot_actual_vs_pred(
-            X_test.index, y_test, y_pred, os.path.join(out_dir, f"{name}_actual_vs_pred.png")
-        )
+        plot_path = os.path.join(out_dir, f"{name}_actual_vs_pred.png")
+        plot_actual_vs_pred(X_test.index, y_test, y_pred, plot_path)
+        if mlflow_logger:
+            mlflow_logger.log_artifact(plot_path, "artifacts/predictions")
+
         try:
+            imp_path = os.path.join(out_dir, f"{name}_feature_importance.png")
             plot_feature_importance(
                 model,
                 X_train.columns.tolist(),
-                os.path.join(out_dir, f"{name}_feature_importance.png"),
+                imp_path,
             )
+            if mlflow_logger:
+                mlflow_logger.log_artifact(imp_path, "artifacts/feature_importance")
         except Exception:
             pass
 
@@ -210,180 +292,323 @@ def train_and_evaluate(
             importance_dfs.append(importance_df)
 
     save_metrics(results, os.path.join(out_dir, "metrics.csv"))
+    if mlflow_logger:
+        mlflow_logger.log_artifact(os.path.join(out_dir, "metrics.csv"), "artifacts")
 
     # Save feature importance summary
     if importance_dfs:
-        save_feature_importance_summary(
-            importance_dfs, os.path.join(out_dir, "feature_importance_summary.csv")
-        )
+        importance_path = os.path.join(out_dir, "feature_importance_summary.csv")
+        save_feature_importance_summary(importance_dfs, importance_path)
+        if mlflow_logger:
+            mlflow_logger.log_artifact(importance_path, "artifacts")
+
         # Create comparison plot
         plot_top_features(models, X_train.columns.tolist(), X_test, top_n=10, out_dir=out_dir)
 
     # Save hyperparameter tuning results
     if tuning_results:
         save_hyperparameter_results(tuning_results, out_dir)
+        if mlflow_logger:
+            mlflow_logger.log_artifact(
+                os.path.join(out_dir, "hyperparameter_tuning_summary.csv"), "artifacts"
+            )
 
     return results
 
 
 def main(args):
-    raw = args.raw
-    processed = args.processed
-    os.makedirs(os.path.dirname(processed), exist_ok=True)
-    if not os.path.exists(processed):
-        print("Processing raw CSV to wide form...")
-        df = load_and_pivot(raw, processed)
+    """Main training orchestration function.
+
+    Args:
+        args: Argparse namespace or TrainConfig instance
+    """
+    # Support both CLI flags (legacy) and config file (new)
+    config = None
+    if hasattr(args, "config") and args.config:
+        # Config file provided
+        config = TrainConfig.from_yaml(args.config)
+        print(f"✓ Loaded config from {args.config}")
     else:
-        df = pd.read_csv(processed, index_col=0)
-        df.index = df.index.astype(int)
+        # Legacy CLI mode: construct config from args
+        config = args_to_config(args)
 
-    print(f"Data has {df.shape[0]} years and {df.shape[1]} indicators")
+    # Set reproducibility seeds first
+    set_random_seeds(config)
 
-    # list available indicators
-    inds = list_available_indicators(raw)
-    print("Available indicators (sample):")
-    pprint(inds[:30])
+    # Track data versions
+    track_data_versions(config)
 
-    # choose target
-    target = args.target
-    if not target:
-        target = choose_target(df.columns.tolist())
-    if not target:
-        raise SystemExit(
-            "Could not auto-detect a target indicator. Please pass --target with the exact indicator name."
+    # Initialize MLflow tracker
+    tracker = MLflowTracker.from_config(config.mlflow) if config.mlflow.enabled else None
+    mlflow_logger = None
+
+    if tracker:
+        tracker.start_run(
+            run_name=f"train_{config.output_dir.split('/')[-1]}",
+            tags={"framework": "scikit-learn", "config_used": str(config)},
         )
-    print(f"Using target indicator: {target}")
+        mlflow_logger = tracker.get_logger()
 
-    # choose features
-    if args.features:
-        features = [f.strip() for f in args.features.split(",")]
-    else:
-        features = choose_columns_by_keywords(
-            df.columns.tolist(), DEFAULT_FEATURE_KEYWORDS, max_features=12
+        # Log config parameters
+        config_dict = config.model_dump(by_alias=False)
+        mlflow_logger.log_config(config_dict)
+
+        # Save config to MLflow artifacts
+        config_artifact_path = os.path.join(config.output_dir, "config_used.yaml")
+        config.to_yaml(config_artifact_path)
+
+    try:
+        raw = config.data.raw_data_path
+        processed = config.data.processed_data_path
+        os.makedirs(os.path.dirname(processed), exist_ok=True)
+        if not os.path.exists(processed):
+            print("Processing raw CSV to wide form...")
+            df = load_and_pivot(raw, processed)
+        else:
+            df = pd.read_csv(processed, index_col=0)
+            df.index = df.index.astype(int)
+
+        print(f"Data has {df.shape[0]} years and {df.shape[1]} indicators")
+
+        # list available indicators
+        inds = list_available_indicators(raw)
+        print("Available indicators (sample):")
+        pprint(inds[:30])
+
+        # choose target
+        target = config.data.target_column
+        if not target:
+            target = choose_target(df.columns.tolist())
+        if not target:
+            raise SystemExit(
+                "Could not auto-detect a target indicator. Please pass target_column in config."
+            )
+        print(f"Using target indicator: {target}")
+
+        # choose features
+        if config.data.explicit_features:
+            features = config.data.explicit_features
+        else:
+            features = choose_columns_by_keywords(
+                df.columns.tolist(),
+                config.data.feature_keywords,
+                max_features=config.feature_engineering.max_features,
+            )
+
+        # CRITICAL: Remove target from features to prevent data leakage
+        features = [f for f in features if f != target]
+
+        print("Selected features:")
+        pprint(features)
+
+        # prepare dataset
+        data = df.copy()
+        # keep target and features
+        cols_needed = [c for c in features if c in data.columns]
+        if target not in data.columns:
+            raise SystemExit(f"Target '{target}' not present in processed data columns")
+        cols_needed = cols_needed + [target]
+        data = data.loc[:, cols_needed]
+
+        data = drop_sparse_columns(data, threshold=config.data.sparse_threshold)
+        data = fill_missing(data)
+
+        # Optional: automatic leakage filtering (drop features highly correlated with target)
+        if config.feature_engineering.apply_leakage_filter:
+            try:
+                corr = data.corr().abs()
+                if target in corr.columns:
+                    target_corr = corr[target].drop(labels=[target], errors="ignore")
+                    leaking = target_corr[
+                        target_corr >= config.feature_engineering.leakage_correlation_threshold
+                    ].index.tolist()
+                    if leaking:
+                        threshold = config.feature_engineering.leakage_correlation_threshold
+                        print(
+                            f"Dropping {len(leaking)} features due to high correlation "
+                            f"with target (>= {threshold}):"
+                        )
+                        for c in leaking:
+                            print("  -", c)
+                        data = data.drop(columns=leaking)
+            except Exception as e:
+                print(f"Warning: leakage filtering skipped due to error: {e}")
+
+        # Optional: pairwise collinearity filtering (drop one of each highly-correlated pair)
+        if config.feature_engineering.apply_collinearity_filter:
+            try:
+                # consider only feature columns (exclude target)
+                feature_cols = [c for c in data.columns if c != target]
+                if feature_cols:
+                    corr_mat = data[feature_cols].corr().abs()
+                    # create list of pairs (i, j, corr) for i<j
+                    pairs = []
+                    for i_idx, i in enumerate(corr_mat.index):
+                        for j_idx, j in enumerate(corr_mat.columns):
+                            if j_idx <= i_idx:
+                                continue
+                            pairs.append((i, j, float(corr_mat.iat[i_idx, j_idx])))
+                    # sort by correlation descending so we drop the more redundant columns first
+                    pairs.sort(key=lambda x: x[2], reverse=True)
+                    to_drop = set()
+                    thresh = config.feature_engineering.collinearity_threshold
+                    for i, j, val in pairs:
+                        if val >= thresh:
+                            # drop j if neither already marked
+                            if i not in to_drop and j not in to_drop:
+                                to_drop.add(j)
+                    if to_drop:
+                        thresh = config.feature_engineering.collinearity_threshold
+                        print(
+                            f"Dropping {len(to_drop)} features due to high pairwise "
+                            f"collinearity (>= {thresh}):"
+                        )
+                        for c in sorted(to_drop):
+                            print("  -", c)
+                        data = data.drop(columns=list(to_drop))
+                        # save dropped list to models dir for auditing
+                        try:
+                            os.makedirs(config.output_dir, exist_ok=True)
+                            with open(
+                                os.path.join(config.output_dir, "collinearity_dropped.txt"),
+                                "w",
+                                encoding="utf-8",
+                            ) as fh:
+                                for c in sorted(to_drop):
+                                    fh.write(c + "\n")
+                        except Exception:
+                            pass
+            except Exception as e:
+                print(f"Warning: collinearity filtering skipped due to error: {e}")
+
+        # optional lag features
+        if config.feature_engineering.lag_features > 0:
+            data = add_lag_features(
+                data,
+                [c for c in features if c in data.columns],
+                lags=config.feature_engineering.lag_features,
+            )
+
+        data = add_year_column(data)
+        data.set_index(data.index, inplace=True)
+
+        # final split
+        y = data[target]
+        # ensure y is a DataFrame (handle duplicate-column or Series cases)
+        if isinstance(y, pd.Series):
+            y = y.to_frame(name=target)
+        X = data.drop(columns=[target])
+
+        X_train_df, X_test_df = temporal_split(X, train_end=config.split.train_end_year)
+        y_train, y_test = temporal_split(y, train_end=config.split.train_end_year)
+        y_train = y_train[target]
+        y_test = y_test[target]
+
+        print(
+            f"Train years: {X_train_df.index.min()}-{X_train_df.index.max()} | "
+            f"Test years: {X_test_df.index.min()}-{X_test_df.index.max()}"
         )
 
-    # CRITICAL: Remove target from features to prevent data leakage
-    features = [f for f in features if f != target]
-
-    print("Selected features:")
-    pprint(features)
-
-    # prepare dataset
-    data = df.copy()
-    # keep target and features
-    cols_needed = [c for c in features if c in data.columns]
-    if target not in data.columns:
-        raise SystemExit(f"Target '{target}' not present in processed data columns")
-    cols_needed = cols_needed + [target]
-    data = data.loc[:, cols_needed]
-
-    data = drop_sparse_columns(data, threshold=0.5)
-    data = fill_missing(data)
-
-    # Optional: automatic leakage filtering (drop features highly correlated with target)
-    if getattr(args, "leakage_filter", False):
-        try:
-            corr = data.corr().abs()
-            if target in corr.columns:
-                target_corr = corr[target].drop(labels=[target], errors="ignore")
-                leaking = target_corr[target_corr >= float(args.leakage_threshold)].index.tolist()
-                if leaking:
-                    print(
-                        f"Dropping {len(leaking)} features due to high correlation with target (>= {args.leakage_threshold}):"
-                    )
-                    for c in leaking:
-                        print("  -", c)
-                    data = data.drop(columns=leaking)
-        except Exception as e:
-            print(f"Warning: leakage filtering skipped due to error: {e}")
-
-    # Optional: pairwise collinearity filtering (drop one of each highly-correlated pair)
-    if getattr(args, "collinearity_filter", False):
-        try:
-            # consider only feature columns (exclude target)
-            feature_cols = [c for c in data.columns if c != target]
-            if feature_cols:
-                corr_mat = data[feature_cols].corr().abs()
-                # create list of pairs (i, j, corr) for i<j
-                pairs = []
-                for i_idx, i in enumerate(corr_mat.index):
-                    for j_idx, j in enumerate(corr_mat.columns):
-                        if j_idx <= i_idx:
-                            continue
-                        pairs.append((i, j, float(corr_mat.iat[i_idx, j_idx])))
-                # sort by correlation descending so we drop the more redundant columns first
-                pairs.sort(key=lambda x: x[2], reverse=True)
-                to_drop = set()
-                thresh = float(args.collinearity_threshold)
-                for i, j, val in pairs:
-                    if val >= thresh:
-                        # drop j if neither already marked
-                        if i not in to_drop and j not in to_drop:
-                            to_drop.add(j)
-                if to_drop:
-                    print(
-                        f"Dropping {len(to_drop)} features due to high pairwise collinearity (>= {thresh}):"
-                    )
-                    for c in sorted(to_drop):
-                        print("  -", c)
-                    data = data.drop(columns=list(to_drop))
-                    # save dropped list to models dir for auditing
-                    try:
-                        os.makedirs(args.models_dir, exist_ok=True)
-                        with open(
-                            os.path.join(args.models_dir, "collinearity_dropped.txt"),
-                            "w",
-                            encoding="utf-8",
-                        ) as fh:
-                            for c in sorted(to_drop):
-                                fh.write(c + "\n")
-                    except Exception:
-                        pass
-        except Exception as e:
-            print(f"Warning: collinearity filtering skipped due to error: {e}")
-
-    # optional lag features
-    if args.lags and int(args.lags) > 0:
-        data = add_lag_features(
-            data, [c for c in features if c in data.columns], lags=int(args.lags)
+        results = train_and_evaluate(
+            X_train_df,
+            y_train,
+            X_test_df,
+            y_test,
+            out_dir=config.output_dir,
+            config=config,
+            mlflow_logger=mlflow_logger,
         )
+        print("Training complete. Metrics:")
+        pprint(results)
 
-    data = add_year_column(data)
-    data.set_index(data.index, inplace=True)
+        # Log final results
+        if mlflow_logger:
+            mlflow_logger.log_metrics({"training_complete": 1})
 
-    # final split
-    y = data[target]
-    # ensure y is a DataFrame (handle duplicate-column or Series cases)
-    if isinstance(y, pd.Series):
-        y = y.to_frame(name=target)
-    X = data.drop(columns=[target])
+    finally:
+        if tracker:
+            tracker.end_run()
 
-    X_train_df, X_test_df = temporal_split(X, train_end=args.train_end)
-    y_train, y_test = temporal_split(y, train_end=args.train_end)
-    y_train = y_train[target]
-    y_test = y_test[target]
 
-    print(
-        f"Train years: {X_train_df.index.min()}-{X_train_df.index.max()} | Test years: {X_test_df.index.min()}-{X_test_df.index.max()}"
+def args_to_config(args) -> "TrainConfig":
+    """Convert argparse args to TrainConfig for backward compatibility.
+
+    Args:
+        args: Argparse namespace with old CLI flags
+
+    Returns:
+        TrainConfig instance
+    """
+    from config_train import (
+        DataConfig,
+        FeatureEngineeringConfig,
+        MLflowConfig,
+        ModelConfig,
+        ModelsConfig,
+        SeedConfig,
+        SplitConfig,
+        TrainConfig,
     )
 
-    results = train_and_evaluate(
-        X_train_df,
-        y_train,
-        X_test_df,
-        y_test,
-        out_dir=args.models_dir,
-        tune_hyperparams=getattr(args, "tune_hyperparams", False),
-        use_ridge=getattr(args, "use_ridge", False),
-        use_lasso=getattr(args, "use_lasso", False),
-        use_xgboost=getattr(args, "use_xgboost", False),
+    # Extract feature list if provided
+    explicit_features = None
+    if hasattr(args, "features") and args.features:
+        explicit_features = [f.strip() for f in args.features.split(",")]
+
+    config = TrainConfig(
+        seeds=SeedConfig(numpy_seed=42, python_seed=42, sklearn_seed=42, xgboost_seed=42),
+        data=DataConfig(
+            raw_data_path=args.raw,
+            processed_data_path=args.processed,
+            explicit_features=explicit_features,
+            target_column=getattr(args, "target", None),
+        ),
+        feature_engineering=FeatureEngineeringConfig(
+            lag_features=int(args.lags),
+            apply_leakage_filter=getattr(args, "leakage_filter", False),
+            leakage_correlation_threshold=float(getattr(args, "leakage_threshold", 0.99)),
+            apply_collinearity_filter=getattr(args, "collinearity_filter", False),
+            collinearity_threshold=float(getattr(args, "collinearity_threshold", 0.95)),
+        ),
+        split=SplitConfig(train_end_year=args.train_end),
+        models=ModelsConfig(
+            enable_hyperparameter_tuning=getattr(args, "tune_hyperparams", False),
+            ridge=ModelConfig(enabled=getattr(args, "use_ridge", False)),
+            lasso=ModelConfig(enabled=getattr(args, "use_lasso", False)),
+            xgboost=ModelConfig(enabled=getattr(args, "use_xgboost", False)),
+        ),
+        mlflow=MLflowConfig(enabled=False),  # Disable for old CLI mode
+        output_dir=args.models_dir,
     )
-    print("Training complete. Metrics:")
-    pprint(results)
+
+    print("ℹ Using legacy CLI mode. Consider using --config for reproducibility.")
+    return config
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train water-stress models for Tunisia.")
+    parser = argparse.ArgumentParser(
+        description="Train water-stress models for Tunisia.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Using new config-based system (RECOMMENDED)
+  python src/train.py --config config/train_config.yaml
+
+  # Legacy CLI mode (for backward compatibility)
+  python src/train.py --processed data/processed/processed_tunisia.csv \\
+      --models_dir models/ --tune_hyperparams
+        """,
+    )
+
+    # New config-based interface
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Path to YAML config file (recommended for reproducibility)",
+    )
+
+    # Legacy CLI arguments (kept for backward compatibility)
     parser.add_argument("--raw", default=os.path.join("data", "raw", "environment_tun.csv"))
     parser.add_argument(
         "--processed", default=os.path.join("data", "processed", "processed_tunisia.csv")
