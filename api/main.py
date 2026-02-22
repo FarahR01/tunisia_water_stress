@@ -7,6 +7,7 @@ This is the main application entry point that:
 - Includes versioned API routers
 - Manages application lifecycle
 """
+
 import logging
 from contextlib import asynccontextmanager
 from typing import Callable
@@ -30,7 +31,6 @@ from .logging_config import setup_logging, LoggingMiddleware, get_logger
 from .routers import get_v1_routers
 from .schemas import ErrorResponse
 
-
 logger = get_logger("api.main")
 
 
@@ -38,25 +38,23 @@ logger = get_logger("api.main")
 # Application Lifespan
 # ============================================================================
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Application lifespan manager.
-    
+
     Handles startup and shutdown events:
     - Startup: Initialize logging, load models
     - Shutdown: Cleanup resources
     """
     settings = get_settings()
-    
+
     # Setup logging
-    setup_logging(
-        log_level=settings.log_level,
-        log_format=settings.log_format
-    )
-    
+    setup_logging(log_level=settings.log_level, log_format=settings.log_format)
+
     logger.info(f"Starting {settings.api_title} v{settings.api_version}")
-    
+
     # Initialize model service (pre-load models)
     try:
         service = get_model_service(settings)
@@ -64,9 +62,9 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to load models: {e}")
         raise
-    
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down API...")
     reset_model_service()
@@ -76,19 +74,20 @@ async def lifespan(app: FastAPI):
 # Application Factory
 # ============================================================================
 
+
 def create_application() -> FastAPI:
     """
     Application factory function.
-    
+
     Creates and configures the FastAPI application with all middleware,
     exception handlers, and routers. This pattern supports testing
     and multiple configurations.
-    
+
     Returns:
         Configured FastAPI application
     """
     settings = get_settings()
-    
+
     app = FastAPI(
         title=settings.api_title,
         version=settings.api_version,
@@ -104,24 +103,24 @@ def create_application() -> FastAPI:
             429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
             500: {"model": ErrorResponse, "description": "Internal server error"},
             503: {"model": ErrorResponse, "description": "Service unavailable"},
-        }
+        },
     )
-    
+
     # Register middleware
     _setup_middleware(app, settings)
-    
+
     # Register exception handlers
     _setup_exception_handlers(app, settings)
-    
+
     # Register routers
     _setup_routers(app, settings)
-    
+
     return app
 
 
 def _setup_middleware(app: FastAPI, settings: Settings) -> None:
     """Configure application middleware."""
-    
+
     # CORS middleware
     app.add_middleware(
         CORSMiddleware,
@@ -131,14 +130,14 @@ def _setup_middleware(app: FastAPI, settings: Settings) -> None:
         allow_headers=["*"],
         expose_headers=["X-Request-ID"],
     )
-    
+
     # Logging middleware
     app.add_middleware(LoggingMiddleware)
 
 
 def _setup_exception_handlers(app: FastAPI, settings: Settings) -> None:
     """Register global exception handlers."""
-    
+
     @app.exception_handler(APIException)
     async def api_exception_handler(request: Request, exc: APIException) -> JSONResponse:
         """Handle all custom API exceptions."""
@@ -147,11 +146,10 @@ def _setup_exception_handlers(app: FastAPI, settings: Settings) -> None:
             content=exc.to_dict(),
             headers=exc.headers,
         )
-    
+
     @app.exception_handler(PydanticValidationError)
     async def pydantic_validation_handler(
-        request: Request, 
-        exc: PydanticValidationError
+        request: Request, exc: PydanticValidationError
     ) -> JSONResponse:
         """Handle Pydantic validation errors."""
         return JSONResponse(
@@ -162,21 +160,18 @@ def _setup_exception_handlers(app: FastAPI, settings: Settings) -> None:
                 "errors": exc.errors(),
             },
         )
-    
+
     @app.exception_handler(Exception)
-    async def generic_exception_handler(
-        request: Request, 
-        exc: Exception
-    ) -> JSONResponse:
+    async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         """Handle unexpected exceptions."""
         logger.exception(f"Unhandled exception: {exc}")
-        
+
         # In debug mode, include exception details
         if settings.api_debug:
             detail = f"{type(exc).__name__}: {str(exc)}"
         else:
             detail = "An unexpected error occurred"
-        
+
         return JSONResponse(
             status_code=500,
             content={
@@ -188,7 +183,7 @@ def _setup_exception_handlers(app: FastAPI, settings: Settings) -> None:
 
 def _setup_routers(app: FastAPI, settings: Settings) -> None:
     """Register API routers."""
-    
+
     # Root endpoint
     @app.get("/", include_in_schema=False)
     async def root():
@@ -197,9 +192,9 @@ def _setup_routers(app: FastAPI, settings: Settings) -> None:
             "message": f"Welcome to {settings.api_title}",
             "version": settings.api_version,
             "docs": "/docs",
-            "health": f"{settings.api_prefix}/health"
+            "health": f"{settings.api_prefix}/health",
         }
-    
+
     # Include v1 routers with prefix
     for router in get_v1_routers():
         app.include_router(router, prefix=settings.api_prefix)
@@ -219,7 +214,7 @@ app = create_application()
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     settings = get_settings()
     uvicorn.run(
         "api.main:app",

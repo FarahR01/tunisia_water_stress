@@ -1,4 +1,5 @@
 """Hyperparameter tuning utilities."""
+
 import os
 import pandas as pd
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
@@ -8,6 +9,7 @@ from sklearn.tree import DecisionTreeRegressor
 
 try:
     from xgboost import XGBRegressor
+
     XGBOOST_AVAILABLE = True
 except Exception:
     XGBOOST_AVAILABLE = False
@@ -47,7 +49,7 @@ PARAM_GRIDS = {
 def tune_hyperparameters(X_train, y_train, X_test, y_test, model_name, model, cv=5, n_iter=None):
     """
     Perform hyperparameter tuning using GridSearchCV or RandomizedSearchCV.
-    
+
     Args:
         X_train, y_train: training data
         X_test, y_test: test data (used for final evaluation)
@@ -55,12 +57,12 @@ def tune_hyperparameters(X_train, y_train, X_test, y_test, model_name, model, cv
         model: sklearn model instance
         cv: number of cross-validation folds
         n_iter: if provided, use RandomizedSearchCV with n_iter searches
-    
+
     Returns:
         dict with best_model, best_params, cv_results_df
     """
     params = PARAM_GRIDS.get(model_name, {})
-    
+
     if not params:
         # No hyperparameter grid defined — just fit the model normally
         model.fit(X_train, y_train)
@@ -70,7 +72,7 @@ def tune_hyperparameters(X_train, y_train, X_test, y_test, model_name, model, cv
             "best_score": None,
             "cv_results": pd.DataFrame(),
         }
-    
+
     if n_iter and n_iter < len(params) ** 2:
         # Use RandomizedSearchCV for large spaces
         searcher = RandomizedSearchCV(
@@ -95,13 +97,13 @@ def tune_hyperparameters(X_train, y_train, X_test, y_test, model_name, model, cv
             verbose=1,
             refit=True,
         )
-    
+
     print(f"Tuning hyperparameters for {model_name}...")
     searcher.fit(X_train, y_train)
-    
+
     best_model = searcher.best_estimator_
     cv_results_df = pd.DataFrame(searcher.cv_results_)
-    
+
     return {
         "best_model": best_model,
         "best_params": searcher.best_params_,
@@ -113,20 +115,22 @@ def tune_hyperparameters(X_train, y_train, X_test, y_test, model_name, model, cv
 def save_hyperparameter_results(tuning_results, out_dir):
     """Save hyperparameter tuning results to CSV."""
     os.makedirs(out_dir, exist_ok=True)
-    
+
     summary = []
     for model_name, result in tuning_results.items():
         if result["best_params"]:
-            summary.append({
-                "model": model_name,
-                "best_score": result["best_score"],
-                "hyperparameters": str(result["best_params"]),
-            })
-    
+            summary.append(
+                {
+                    "model": model_name,
+                    "best_score": result["best_score"],
+                    "hyperparameters": str(result["best_params"]),
+                }
+            )
+
     if summary:
         summary_df = pd.DataFrame(summary)
         summary_df.to_csv(os.path.join(out_dir, "hyperparameter_tuning_summary.csv"), index=False)
-        
+
         # Also save detailed CV results for each model
         for model_name, result in tuning_results.items():
             if not result["cv_results"].empty:

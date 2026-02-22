@@ -1,12 +1,12 @@
 from PIL import Image
 
 files = [
-    'models/LinearRegression_feature_importance.png',
-    'models/LinearRegression_actual_vs_pred.png',
-    'models/DecisionTree_actual_vs_pred.png',
-    'models/DecisionTree_feature_importance.png',
-    'models/RandomForest_actual_vs_pred.png',
-    'models/RandomForest_feature_importance.png',
+    "models/LinearRegression_feature_importance.png",
+    "models/LinearRegression_actual_vs_pred.png",
+    "models/DecisionTree_actual_vs_pred.png",
+    "models/DecisionTree_feature_importance.png",
+    "models/RandomForest_actual_vs_pred.png",
+    "models/RandomForest_feature_importance.png",
 ]
 
 for f in files:
