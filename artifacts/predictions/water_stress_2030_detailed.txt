@@ -1,0 +1,27 @@
+=== Tunisia Water Stress 2030 Projections ===
+
+Generated: 2026-02-22 04:20:28
+Scenario Method: average
+Data Range: 1960-2024
+Prediction Year: 2030
+
+Model: DecisionTree
+  Predicted 2030 Water Stress: 83.867895
+  Last Historical Value (2024): nan
+
+Model: Lasso
+  Predicted 2030 Water Stress: 80.927866
+  Last Historical Value (2024): nan
+
+Model: LinearRegression
+  Predicted 2030 Water Stress: 81.274754
+  Last Historical Value (2024): nan
+
+Model: RandomForest
+  Predicted 2030 Water Stress: 84.879676
+  Last Historical Value (2024): nan
+
+Model: Ridge
+  Predicted 2030 Water Stress: 81.229140
+  Last Historical Value (2024): nan
+
