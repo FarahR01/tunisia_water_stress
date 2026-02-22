@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression, Ridge, Lasso
+from sklearn.preprocessing import StandardScaler
 from sklearn.tree import DecisionTreeRegressor
 
 try:
@@ -16,13 +17,23 @@ except Exception as e:
     XGBOOST_AVAILABLE = False
     XGBRegressor = None
 
-from .data_loader import load_and_pivot, list_available_indicators
-from .evaluate import (plot_actual_vs_pred, plot_feature_importance,
-                       regression_metrics, save_metrics)
-from .feature_engineering import add_lag_features, add_year_column
-from .preprocessing import drop_sparse_columns, fill_missing, select_features
-from .feature_importance import extract_feature_importance, plot_top_features, save_feature_importance_summary
-from .hyperparameter_tuning import tune_hyperparameters, save_hyperparameter_results
+try:
+    from .data_loader import load_and_pivot, list_available_indicators
+    from .evaluate import (plot_actual_vs_pred, plot_feature_importance,
+                           regression_metrics, save_metrics)
+    from .feature_engineering import add_lag_features, add_year_column
+    from .preprocessing import drop_sparse_columns, fill_missing, select_features
+    from .feature_importance import extract_feature_importance, plot_top_features, save_feature_importance_summary
+    from .hyperparameter_tuning import tune_hyperparameters, save_hyperparameter_results
+except Exception:
+    # Support running `python src/train.py` (script) where `src/` is on sys.path
+    from data_loader import load_and_pivot, list_available_indicators
+    from evaluate import (plot_actual_vs_pred, plot_feature_importance,
+                          regression_metrics, save_metrics)
+    from feature_engineering import add_lag_features, add_year_column
+    from preprocessing import drop_sparse_columns, fill_missing, select_features
+    from feature_importance import extract_feature_importance, plot_top_features, save_feature_importance_summary
+    from hyperparameter_tuning import tune_hyperparameters, save_hyperparameter_results
 
 
 DEFAULT_FEATURE_KEYWORDS = [
@@ -78,6 +89,18 @@ def temporal_split(df: pd.DataFrame, train_end: int = 2010):
 
 
 def train_and_evaluate(X_train, y_train, X_test, y_test, out_dir: str, tune_hyperparams=False, use_ridge=False, use_lasso=False, use_xgboost=False):
+    # Scale features for linear models to improve numeric stability (Ridge/Lasso)
+    scaler = StandardScaler()
+    X_train_scaled = X_train.copy()
+    X_test_scaled = X_test.copy()
+    try:
+        X_train_scaled = pd.DataFrame(scaler.fit_transform(X_train), index=X_train.index, columns=X_train.columns)
+        X_test_scaled = pd.DataFrame(scaler.transform(X_test), index=X_test.index, columns=X_test.columns)
+    except Exception:
+        # fallback: if conversion fails, continue with originals
+        X_train_scaled = X_train.copy()
+        X_test_scaled = X_test.copy()
+
     models = {
         "LinearRegression": LinearRegression(),
         "DecisionTree": DecisionTreeRegressor(random_state=0),
@@ -88,7 +111,8 @@ def train_and_evaluate(X_train, y_train, X_test, y_test, out_dir: str, tune_hype
     if use_ridge:
         models["Ridge"] = Ridge()
     if use_lasso:
-        models["Lasso"] = Lasso()
+        # increase max_iter to help convergence on Lasso
+        models["Lasso"] = Lasso(max_iter=10000)
     if use_xgboost:
         if XGBOOST_AVAILABLE and XGBRegressor is not None:
             try:
@@ -106,15 +130,23 @@ def train_and_evaluate(X_train, y_train, X_test, y_test, out_dir: str, tune_hype
     os.makedirs(out_dir, exist_ok=True)
     
     for name, model in models.items():
+        # choose scaled inputs for linear models
+        if name in ("LinearRegression", "Ridge", "Lasso"):
+            Xtr = X_train_scaled
+            Xte = X_test_scaled
+        else:
+            Xtr = X_train
+            Xte = X_test
+
         # Hyperparameter tuning if enabled
         if tune_hyperparams:
-            tuning_result = tune_hyperparameters(X_train, y_train, X_test, y_test, name, model)
+            tuning_result = tune_hyperparameters(Xtr, y_train, Xte, y_test, name, model)
             tuning_results[name] = tuning_result
             model = tuning_result["best_model"]
         else:
-            model.fit(X_train, y_train)
-        
-        y_pred = model.predict(X_test)
+            model.fit(Xtr, y_train)
+
+        y_pred = model.predict(Xte)
         metrics = regression_metrics(y_test, y_pred)
         results[name] = metrics
         joblib.dump(model, os.path.join(out_dir, f"{name}.joblib"))

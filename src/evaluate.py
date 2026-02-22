@@ -2,6 +2,12 @@ import os
 from typing import Dict
 
 import joblib
+import matplotlib
+# Use a non-interactive backend for scripts/CI (prevents GUI windows)
+try:
+    matplotlib.use("Agg")
+except Exception:
+    pass
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
