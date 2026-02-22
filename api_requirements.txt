@@ -1,0 +1,20 @@
+# Tunisia Water Stress ML API Requirements
+# FastAPI and web server
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.0.0
+
+# ML dependencies (for model loading and prediction)
+scikit-learn>=1.4.0
+joblib>=1.3.0
+pandas>=2.1.0
+numpy>=1.26.0
+
+# Optional: XGBoost support (uncomment if using XGBoost models)
+# xgboost>=2.0.0
+
+# HTTP client for testing
+httpx>=0.26.0
+
+# Production server
+gunicorn>=21.0.0
