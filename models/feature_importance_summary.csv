@@ -1,0 +1,9 @@
+feature,importance,rank,model
+year,0.9571127561185394,1,DecisionTree
+"Water productivity, total (constant 2015 US$ GDP per cubic meter of total freshwater withdrawal)",0.032730911531802284,2,DecisionTree
+Renewable internal freshwater resources per capita (cubic meters),0.010156332349658348,3,DecisionTree
+"Renewable internal freshwater resources, total (billion cubic meters)",0.0,4,DecisionTree
+year,0.5130980318687377,1,RandomForest
+Renewable internal freshwater resources per capita (cubic meters),0.4679434291873086,2,RandomForest
+"Water productivity, total (constant 2015 US$ GDP per cubic meter of total freshwater withdrawal)",0.01895853894395365,3,RandomForest
+"Renewable internal freshwater resources, total (billion cubic meters)",0.0,4,RandomForest
