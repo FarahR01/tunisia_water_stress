@@ -1,0 +1,83 @@
+# Pre-commit hooks configuration
+# This file configures automatic code quality checks to run before each commit.
+# Hooks include:
+# - black: Code formatting
+# - flake8: Style and quality linting
+# - mypy: Static type checking
+
+repos:
+  # Code formatting with Black
+  - repo: https://github.com/psf/black
+    rev: "24.1.1"
+    hooks:
+      - id: black
+        language_version: "python3"
+        args: ["--line-length=100"]
+        types: [python]
+
+  # Style and quality linting with flake8
+  - repo: https://github.com/PyCQA/flake8
+    rev: "7.0.0"
+    hooks:
+      - id: flake8
+        args:
+          - "--max-line-length=100"
+          - "--extend-ignore=E203,W503"
+          - "--exclude=venv,__pycache__,.pytest_cache,.git"
+        types: [python]
+
+  # Type checking with mypy
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        args:
+          - "--ignore-missing-imports"
+          - "--no-error-summary"
+        types: [python]
+        additional_dependencies:
+          - types-all
+
+  # Remove unused imports and format imports
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: [--profile, black]
+        types: [python]
+
+  # Check for common issues
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: debug-statements
+
+  # Security checks with bandit
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.5
+    hooks:
+      - id: bandit
+        args: [-ll]
+        exclude: ^tests/
+        types: [python]
+
+# Files to exclude from pre-commit checks
+exclude: |
+  (?x)^(
+      venv/|
+      __pycache__/|
+      .pytest_cache/|
+      .git/|
+      .venv/|
+      notebooks/|
+      artifacts/
+  )
+
+default_language_version:
+  python: python3.14
+
