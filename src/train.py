@@ -36,10 +36,11 @@ except Exception:
     from hyperparameter_tuning import tune_hyperparameters, save_hyperparameter_results
 
 
+print(">>> USING UPDATED TRAIN FILE (leakage fix applied) <<<")
+
 DEFAULT_FEATURE_KEYWORDS = [
-    "freshwater",
     "renewable",
-    "withdraw",
+    "water productivity",
     "population",
     "urban",
     "rural",
@@ -48,7 +49,15 @@ DEFAULT_FEATURE_KEYWORDS = [
     "precipitation",
     "forest",
     "greenhouse",
-    "water productivity",
+]
+
+# Blacklist features that cause leakage or mathematical dependence with water-stress target
+FEATURE_BLACKLIST = [
+    "annual freshwater withdrawals, agriculture",
+    "annual freshwater withdrawals, domestic",
+    "annual freshwater withdrawals, industry",
+    "annual freshwater withdrawals, total",
+    "level of water stress",  # this is the target itself
 ]
 
 
@@ -57,6 +66,9 @@ def choose_columns_by_keywords(columns, keywords, max_features=12):
     cols_lower = [c.lower() for c in columns]
     for kw in keywords:
         for i, c in enumerate(columns):
+            # skip blacklisted features
+            if any(bl in cols_lower[i] for bl in FEATURE_BLACKLIST):
+                continue
             if kw in cols_lower[i] and c not in cols:
                 cols.append(c)
                 if len(cols) >= max_features:
@@ -65,16 +77,13 @@ def choose_columns_by_keywords(columns, keywords, max_features=12):
 
 
 def choose_target(columns):
-    # try to find an indicator that matches water stress / freshwater withdrawals
+    # Prioritize "Level of water stress" as the primary target
     cols_lower = [c.lower() for c in columns]
-    candidates = []
+    # First pass: look for exact "water stress" indicator
     for i, c in enumerate(columns):
-        name = cols_lower[i]
-        if ("withdraw" in name and "fresh" in name) or ("water stress" in name) or ("freshwater" in name and "%" in name):
-            candidates.append(c)
-    if candidates:
-        return candidates[0]
-    # fallback: any indicator mentioning 'freshwater' or 'withdraw'
+        if "water stress" in cols_lower[i]:
+            return c
+    # Second pass: any freshwater/withdraw indicator (fallback)
     for i, c in enumerate(columns):
         name = cols_lower[i]
         if "freshwater" in name or "withdraw" in name:
