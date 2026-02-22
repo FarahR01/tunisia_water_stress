@@ -36,7 +36,8 @@ repos:
           - "--no-error-summary"
         types: [python]
         additional_dependencies:
-          - types-all
+          - types-requests
+          - types-PyYAML
 
   # Remove unused imports and format imports
   - repo: https://github.com/PyCQA/isort
