@@ -1,0 +1,5 @@
+model,best_score,hyperparameters
+DecisionTree,-2.1150163612654204e+25,"{'max_depth': 3, 'min_samples_leaf': 4, 'min_samples_split': 2}"
+RandomForest,-1.9664234889997374e+26,"{'max_depth': 5, 'min_samples_leaf': 1, 'min_samples_split': 2, 'n_estimators': 100}"
+Ridge,-1.2032718838582672e+23,{'alpha': 0.001}
+Lasso,-7.101441615185282e+23,{'alpha': 0.0001}
