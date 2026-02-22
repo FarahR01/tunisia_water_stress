@@ -1,0 +1,6 @@
+model,prediction_2030,scenario_method
+DecisionTree,80.64466120833335,linear
+Lasso,74.74119697009044,linear
+LinearRegression,75.39532407137025,linear
+RandomForest,82.15317564585003,linear
+Ridge,75.30519727590716,linear
