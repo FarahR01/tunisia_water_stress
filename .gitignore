@@ -35,3 +35,15 @@ Thumbs.db
 # Environment variables
 .env
 .env.local
+# MLflow experiment tracking
+mlruns/
+.mlflow/
+
+# Reproducibility artifacts
+data_manifest.json
+data/data_manifest.json
+*.log
+
+# Temporary files
+*.tmp
+.tmp/
