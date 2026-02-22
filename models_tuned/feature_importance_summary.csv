@@ -1,0 +1,11 @@
+feature,importance,rank,model
+year,0.9613514121854372,1,DecisionTree
+"Water productivity, total (constant 2015 US$ GDP per cubic meter of total freshwater withdrawal)",0.03213429978421025,2,DecisionTree
+"Annual freshwater withdrawals, industry (% of total freshwater withdrawal)",0.005372876375861685,3,DecisionTree
+"Annual freshwater withdrawals, agriculture (% of total freshwater withdrawal)",0.0011414116544908547,4,DecisionTree
+"Renewable internal freshwater resources, total (billion cubic meters)",0.0,5,DecisionTree
+year,0.9682027890152863,1,RandomForest
+"Water productivity, total (constant 2015 US$ GDP per cubic meter of total freshwater withdrawal)",0.028547991432109822,2,RandomForest
+"Annual freshwater withdrawals, agriculture (% of total freshwater withdrawal)",0.0017327473776659638,3,RandomForest
+"Annual freshwater withdrawals, industry (% of total freshwater withdrawal)",0.0015164721749378856,4,RandomForest
+"Renewable internal freshwater resources, total (billion cubic meters)",0.0,5,RandomForest
