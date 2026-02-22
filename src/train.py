@@ -6,14 +6,23 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, Ridge, Lasso
 from sklearn.tree import DecisionTreeRegressor
 
-from data_loader import load_and_pivot, list_available_indicators
-from evaluate import (plot_actual_vs_pred, plot_feature_importance,
-                      regression_metrics, save_metrics)
-from feature_engineering import add_lag_features, add_year_column
-from preprocessing import drop_sparse_columns, fill_missing, select_features
+try:
+    from xgboost import XGBRegressor
+    XGBOOST_AVAILABLE = True
+except Exception as e:
+    XGBOOST_AVAILABLE = False
+    XGBRegressor = None
+
+from .data_loader import load_and_pivot, list_available_indicators
+from .evaluate import (plot_actual_vs_pred, plot_feature_importance,
+                       regression_metrics, save_metrics)
+from .feature_engineering import add_lag_features, add_year_column
+from .preprocessing import drop_sparse_columns, fill_missing, select_features
+from .feature_importance import extract_feature_importance, plot_top_features, save_feature_importance_summary
+from .hyperparameter_tuning import tune_hyperparameters, save_hyperparameter_results
 
 
 DEFAULT_FEATURE_KEYWORDS = [
@@ -68,27 +77,72 @@ def temporal_split(df: pd.DataFrame, train_end: int = 2010):
     return train, test
 
 
-def train_and_evaluate(X_train, y_train, X_test, y_test, out_dir: str):
+def train_and_evaluate(X_train, y_train, X_test, y_test, out_dir: str, tune_hyperparams=False, use_ridge=False, use_lasso=False, use_xgboost=False):
     models = {
         "LinearRegression": LinearRegression(),
         "DecisionTree": DecisionTreeRegressor(random_state=0),
         "RandomForest": RandomForestRegressor(n_estimators=100, random_state=0),
     }
+    
+    # Add Ridge/Lasso if requested
+    if use_ridge:
+        models["Ridge"] = Ridge()
+    if use_lasso:
+        models["Lasso"] = Lasso()
+    if use_xgboost:
+        if XGBOOST_AVAILABLE and XGBRegressor is not None:
+            try:
+                models["XGBoost"] = XGBRegressor(random_state=0, verbosity=0)
+                print("✓ XGBoost successfully added to models")
+            except Exception as e:
+                print(f"Warning: Failed to instantiate XGBoost: {e}")
+        else:
+            print("Warning: XGBoost requested but not available. Install with: pip install xgboost")
+    
     results = {}
+    tuning_results = {}
+    importance_dfs = []
+    
     os.makedirs(out_dir, exist_ok=True)
+    
     for name, model in models.items():
-        model.fit(X_train, y_train)
+        # Hyperparameter tuning if enabled
+        if tune_hyperparams:
+            tuning_result = tune_hyperparameters(X_train, y_train, X_test, y_test, name, model)
+            tuning_results[name] = tuning_result
+            model = tuning_result["best_model"]
+        else:
+            model.fit(X_train, y_train)
+        
         y_pred = model.predict(X_test)
         metrics = regression_metrics(y_test, y_pred)
         results[name] = metrics
         joblib.dump(model, os.path.join(out_dir, f"{name}.joblib"))
-        # plots for best models
+        
+        # plots for predictions
         plot_actual_vs_pred(X_test.index, y_test, y_pred, os.path.join(out_dir, f"{name}_actual_vs_pred.png"))
         try:
             plot_feature_importance(model, X_train.columns.tolist(), os.path.join(out_dir, f"{name}_feature_importance.png"))
         except Exception:
             pass
+        
+        # Extract feature importance
+        importance_df = extract_feature_importance(model, X_train.columns.tolist(), name)
+        if importance_df is not None:
+            importance_dfs.append(importance_df)
+    
     save_metrics(results, os.path.join(out_dir, "metrics.csv"))
+    
+    # Save feature importance summary
+    if importance_dfs:
+        save_feature_importance_summary(importance_dfs, os.path.join(out_dir, "feature_importance_summary.csv"))
+        # Create comparison plot
+        plot_top_features(models, X_train.columns.tolist(), X_test, top_n=10, out_dir=out_dir)
+    
+    # Save hyperparameter tuning results
+    if tuning_results:
+        save_hyperparameter_results(tuning_results, out_dir)
+    
     return results
 
 
@@ -217,7 +271,11 @@ def main(args):
 
     print(f"Train years: {X_train_df.index.min()}-{X_train_df.index.max()} | Test years: {X_test_df.index.min()}-{X_test_df.index.max()}")
 
-    results = train_and_evaluate(X_train_df, y_train, X_test_df, y_test, out_dir=args.models_dir)
+    results = train_and_evaluate(X_train_df, y_train, X_test_df, y_test, out_dir=args.models_dir, 
+                                   tune_hyperparams=getattr(args, "tune_hyperparams", False),
+                                   use_ridge=getattr(args, "use_ridge", False),
+                                   use_lasso=getattr(args, "use_lasso", False),
+                                   use_xgboost=getattr(args, "use_xgboost", False))
     print("Training complete. Metrics:")
     pprint(results)
 
@@ -235,5 +293,9 @@ if __name__ == "__main__":
     parser.add_argument("--leakage_threshold", type=float, default=0.99, help="Correlation threshold for leakage filtering (default 0.99)")
     parser.add_argument("--collinearity_filter", action="store_true", help="Drop features with high pairwise correlation >= collinearity_threshold")
     parser.add_argument("--collinearity_threshold", type=float, default=0.95, help="Pairwise correlation threshold for collinearity filtering (default 0.95)")
+    parser.add_argument("--tune_hyperparams", action="store_true", help="Enable hyperparameter tuning using GridSearchCV")
+    parser.add_argument("--use_ridge", action="store_true", help="Include Ridge regression in models")
+    parser.add_argument("--use_lasso", action="store_true", help="Include Lasso regression in models")
+    parser.add_argument("--use_xgboost", action="store_true", help="Include XGBoost in models (requires xgboost package)")
     args = parser.parse_args()
     main(args)
