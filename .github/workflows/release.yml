@@ -1,0 +1,30 @@
+name: Release - Build Docker Image
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  build-docker:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build Docker image
+        run: |
+          docker build -t tunisia-water-stress:${{ github.event.release.tag_name }} .
+          docker build -t tunisia-water-stress:latest .
+
+      - name: Test Docker image
+        run: |
+          docker run --rm tunisia-water-stress:latest python -m pytest tests/ -v
+
+      - name: Output image info
+        run: |
+          echo "✅ Docker image built successfully!"
+          echo "Tag: ${{ github.event.release.tag_name }}"
