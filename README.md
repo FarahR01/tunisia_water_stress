@@ -244,3 +244,48 @@ Complete guides available in `docs/`:
   - Type hints and code quality requirements
   - Testing requirements (100% coverage on src/)
   - Pre-commit hooks setup
+
+---
+
+## About Me
+
+👋 **Farah Rihane** | Software Engineer
+
+Hi! I'm Farah, a software engineer discovering the exciting world of AI, ML, and Data Science. This project represents my journey learning how to build production-ready machine learning systems from the ground up.
+
+**What I've learned building this project:**
+- 🧠 How to structure ML projects with proper separation of concerns (data, models, API, tests)
+- 📊 The importance of temporal awareness in time-series ML (train/test splits matter!)
+- 🔍 Practical feature engineering and diagnostic techniques (multicollinearity, data leakage detection)
+- 🚀 End-to-end ML system design: from data pipelines to REST APIs to interactive dashboards
+- ✅ Testing, documentation, and deployment practices for real-world systems
+
+**Tech stack I'm mastering:**
+- **ML & Data**: Scikit-learn, Pandas, NumPy, Statsmodels
+- **API & Deployment**: FastAPI, Docker, Docker Compose, Nginx
+- **Frontend**: Streamlit for interactive dashboards
+- **Tools**: Git, pre-commit, Jupyter notebooks, pytest
+- **Data Engineering**: World Bank Open Data APIs, CSV pipelines, wide/long format transformations
+
+This project demonstrates my commitment to writing clean, well-documented, testable code. Every module has comprehensive docstrings, every decision is documented in `docs/DECISIONS.md`, and every feature is covered by tests.
+
+**Interested in my work?** Check out [CONTRIBUTING.md](CONTRIBUTING.md) to see how you can help, or open an issue if you have suggestions!
+
+---
+
+## License
+
+This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+
+**You are free to:**
+- ✅ Use this code commercially or personally
+- ✅ Modify and distribute it
+- ✅ Share and adapt it
+
+**With the condition that:**
+- 📋 You include the license and copyright notice (LICENSE file)
+
+**What you cannot do:**
+- ❌ Hold the author liable for any damages or issues
+
+For the full legal text, see [LICENSE](LICENSE).
