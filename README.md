@@ -14,8 +14,6 @@ What this repo showcases
 
 Repository structure
 
-Repository structure
-
 ```
 tunisia_water_stress_ml/
 ├── docs/                          # 📚 Project documentation
@@ -45,52 +43,79 @@ tunisia_water_stress_ml/
 │       ├── v1.py                  # v1 endpoints
 │       └── __init__.py
 │
-├── tests/                         # ✅ Test Suite (52 tests)
-│   ├── test_data_loader.py        # Data loading tests (9)
-│   ├── test_preprocessing.py      # Preprocessing tests (16)
-│   ├── test_feature_engineering.py# Feature engineering tests (18)
-│   ├── test_pipeline_integration.py# End-to-end tests (8)
+├── tests/                         # ✅ Test Suite
+│   ├── test_data_loader.py        # Data loading tests
+│   ├── test_preprocessing.py      # Preprocessing tests
+│   ├── test_feature_engineering.py# Feature engineering tests
+│   ├── test_pipeline_integration.py# End-to-end tests
 │   ├── test_api.py                # API endpoint tests
 │   ├── test_model_service.py      # Model service tests
+│   ├── test_schemas.py            # Schema validation tests
 │   ├── conftest.py                # Shared fixtures
 │   └── __pycache__/
 │
 ├── data/
 │   ├── raw/                       # World Bank indicator CSVs
-│   │   └── environment_tun.csv    # Tunisia environment data (long format)
-│   └── processed/
-│       └── processed_tunisia.csv  # Cleaned, wide-format (ready for ML)
+│   ├── processed/                 # Cleaned, processed data
+│   └── DATA_VERSION.md            # Data versioning info
 │
 ├── models/                        # 📊 Trained Models & Results
 │   ├── RandomForest.joblib        # Trained model
 │   ├── Ridge.joblib               # Regularized linear model
+│   ├── DecisionTree.joblib        # Decision tree model
 │   ├── metrics.csv                # Performance metrics (MAE, RMSE, R²)
-│   ├── *_actual_vs_pred.png       # Prediction plots
-│   └── *_feature_importance.png   # Feature importance plots
+│   └── feature_importance_summary.csv
+│
+├── models_tuned/                  # Hyperparameter-tuned models
+│   ├── RandomForest.joblib        # Tuned model
+│   ├── Ridge.joblib               # Tuned model
+│   ├── Lasso.joblib               # Tuned model
+│   ├── DecisionTree.joblib        # Tuned model
+│   ├── metrics.csv                # Tuned model metrics
+│   ├── hyperparameter_tuning_summary.csv
+│   ├── *_cv_results.csv           # Cross-validation results
+│   └── collinearity_dropped.txt   # Dropped features due to collinearity
+│
+├── artifacts/
+│   ├── models_tuned/              # Additional tuned model artifacts
+│   └── predictions/               # Future predictions & scenario analysis
+│
+├── config/
+│   └── train_config.yaml          # Training configuration
+│
+├── dashboard/                     # 📊 Streamlit Dashboard
+│   ├── app.py                     # Dashboard main app
+│   ├── Dockerfile                 # Dashboard container
+│   ├── docker-compose.yml         # Dashboard orchestration
+│   ├── requirements.txt           # Dashboard dependencies
+│   ├── components/                # Dashboard UI components
+│   ├── pages/                     # Dashboard pages
+│   └── utils/                     # Dashboard utilities
 │
 ├── notebooks/                     # 📓 Jupyter Notebooks
 │   ├── 01_data_exploration.ipynb  # EDA, data quality checks
 │   ├── 02_model_inspection.ipynb  # Model plots & correlation analysis
 │   └── 03_modeling.ipynb          # Full training walkthrough
 │
+├── scripts/
+│   ├── check_correlations.py      # Correlation analysis utility
+│   └── predict_2030.py            # Future predictions script
+│
 ├── .pre-commit-config.yaml        # Pre-commit hooks (black, flake8, mypy, bandit)
 ├── .gitignore                     # Git ignore patterns
 ├── README.md                      # Project overview (you are here)
+├── LICENSE                        # MIT License
 ├── CONTRIBUTING.md                # Contribution guidelines
 ├── requirements.txt               # Production dependencies
-├── api_requirements.txt           # Dev + API dependencies
-│
-├── CODE_QUALITY_SUMMARY.md        # Code quality implementation details
-├── IMPLEMENTATION_STATUS.md       # Feature completion checklist
-├── FINAL_REPORT.md                # Project completion report
-│
+├── api_requirements.txt           # API dependencies
 ├── docker-compose.yml             # Multi-container orchestration
 ├── Dockerfile                     # API container image
 ├── nginx.conf                     # Reverse proxy configuration
+├── run_api.bat                    # Windows API startup script
+├── run_api.sh                     # Unix API startup script
 │
-└── scripts/
-    ├── check_correlations.py      # Correlation analysis utility
-    └── predict_2030.py            # Future predictions script
+└── docs/
+    └── (See above)
 ```
 
 ---
@@ -120,7 +145,7 @@ World Bank API (Open Data)
    └─────────────────────────────────────┘
 ```
 
-**Why Temporal Split?** 
+**Why Temporal Split?**
 - ✓ Prevents data leakage (no future info in training)
 - ✓ Realistic evaluation (how model performs on unseen future)
 - ✗ (Incorrect) Random split would artificially inflate accuracy
@@ -219,31 +244,3 @@ Complete guides available in `docs/`:
   - Type hints and code quality requirements
   - Testing requirements (100% coverage on src/)
   - Pre-commit hooks setup
-
-Key findings (from an initial run)
-- The pipeline auto-detected a water-related target and trained three models. The saved metrics are in `models/metrics.csv` and plots are in `models/`.
-- A near-perfect Linear Regression fit was traced to target leakage: the processed features contained indicators that are identical or direct transforms of the target (e.g., "Annual freshwater withdrawals, total (% of internal resources)" and similar). This causes inflated R² and misleading performance.
-
-Recommended next steps
-- Remove duplicate/target-leaking indicators before training (drop columns that are identical or have |corr| >= 0.99 with the target).\
-- Use regularized linear models (`Ridge`, `Lasso`) to reduce coefficient instability.\
-- Use feature selection (drop highly collinear features / use PCA) and hyperparameter tuning for tree ensembles.\
-- Expand evaluation: cross-validate using rolling-origin (time-series CV), and produce explainability plots (SHAP) for Random Forest.
-
-What I learned / Demonstrated skills
-- Practical handling of long-form World Bank data and reshaping to wide time-series.\
-- Time-aware splitting and the importance of avoiding random splits on time-series data.\
-- Detecting data leakage and diagnosing multicollinearity using correlation matrices.\
-- Building a small, reproducible training pipeline with clear outputs (models, plots, metrics).
-
-Notes and caveats
-- The current pipeline is Stage 1 (baselines and diagnostics). Careful feature curation and model tuning are required before trustable policy recommendations can be made.\
-- Some World Bank indicators may be sparse or only partially overlapping in years — the preprocessing step interpolates and forward/back-fills where appropriate; review interpolation choices for your analysis goals.
-
-If you want, I can now:
-- automatically drop columns that leak the target and re-run training with `Ridge`, or\
-- produce a minimal write-up section suitable for GitHub (results, plots, and interpretation).
-
-Contact
-- Repo maintained by the project author. Pull requests and issues welcome.
-
