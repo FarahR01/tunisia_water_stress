@@ -13,16 +13,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy requirements first for layer caching
 COPY api_requirements.txt .
-RUN pip install --no-cache-dir --user -r api_requirements.txt
+RUN pip install --no-cache-dir -r api_requirements.txt
 
 # Production stage
 FROM python:3.11-slim as production
 
 WORKDIR /app
 
-# Copy Python packages from builder
-COPY --from=builder /root/.local /root/.local
-ENV PATH=/root/.local/bin:$PATH
+# Copy Python packages from builder - packages are installed globally
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 
 # Copy application code
 COPY api/ ./api/
@@ -39,7 +38,7 @@ EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import httpx; httpx.get('http://localhost:8000/health', timeout=5).raise_for_status()" || exit 1
+    CMD python -c "import httpx; httpx.get('http://localhost:8000/api/v1/health', timeout=5).raise_for_status()" || exit 1
 
-# Run the application
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run the application - using python -m to avoid permission issues
+CMD ["python", "-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
