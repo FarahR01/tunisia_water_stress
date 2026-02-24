@@ -47,3 +47,14 @@ data/data_manifest.json
 # Temporary files
 *.tmp
 .tmp/
+
+
+# Ignore all Markdown files
+*.md
+
+# But keep README.md
+!README.md
+
+# Keep all markdown files inside docs/
+!docs/
+!docs/**
