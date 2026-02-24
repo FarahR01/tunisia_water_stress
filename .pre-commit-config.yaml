@@ -66,6 +66,7 @@ repos:
         args: [-ll]
         exclude: ^tests/
         types: [python]
+        additional_dependencies: ['pbr']
 
 # Files to exclude from pre-commit checks
 exclude: |
