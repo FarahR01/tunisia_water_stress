@@ -3,7 +3,15 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+# --------------------
+# Python cache (API)
+# --------------------
+__pycache__/
+**/__pycache__/
 
+# Compiled Python files
+*.pyc
+*.pyo
 # Virtual environments
 venv/
 env/

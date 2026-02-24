@@ -1,0 +1,40 @@
+# Ignore dashboard debug and checklist markdown files
+DASHBOARD_CLEAN_VERSION.md
+FINAL_CHECKLIST.md
+# Streamlit Dashboard .gitignore
+
+# Streamlit cache
+.streamlit/cache/
+.streamlit/*.cache
+*.streamlit.cache
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environment
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+.env
+
+# Logs
+*.log
+logs/
+
+# Dependencies
+.streamlit/cache*
